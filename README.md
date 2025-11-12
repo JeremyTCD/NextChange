@@ -73,7 +73,13 @@ src/
 ├── extension.ts       # Entry point, command registration
 ├── gitProvider.ts     # Git API integration
 ├── changeNavigator.ts # Core navigation logic with smart caching
-└── types.ts          # TypeScript interfaces
+├── types.ts          # TypeScript interfaces
+└── test/
+    ├── mocks/         # Mock implementations for testing
+    └── suite/         # Test suites
+        ├── changeNavigator.test.ts  # Core navigation tests
+        ├── gitProvider.test.ts      # Git diff parsing tests
+        └── integration.test.ts      # End-to-end scenarios
 ```
 
 ### Key Design Principles
@@ -82,6 +88,39 @@ src/
 2. **Minimal state** - Only track current position (file + line)
 3. **Smart positioning** - Resolve position intelligently after cache updates
 4. **Fail gracefully** - Clear error messages, never crash
+
+## Testing
+
+The extension includes comprehensive automated tests:
+
+### Running Tests
+
+```bash
+# Compile the code
+npm run compile
+
+# Run tests (downloads VSCode and runs tests in it)
+npm test
+```
+
+### Test Coverage
+
+- **Unit Tests (gitProvider.test.ts)**: Tests Git diff parsing, status mapping, and line number tracking
+- **Unit Tests (changeNavigator.test.ts)**: Tests core navigation logic, smart caching, and position tracking
+  - ✓ Critical: Verifies the bug fix for position tracking after staging files
+  - ✓ Tests wrapping at file boundaries
+  - ✓ Tests cache refresh and position resolution
+- **Integration Tests (integration.test.ts)**: Real-world usage scenarios
+  - Progressive file review and staging
+  - Skipping unimportant files
+  - Partial file staging
+  - Complex navigation patterns
+
+### Test Philosophy
+
+- **Mock Git state** for predictable, fast tests
+- **Test the bug fix** explicitly (no jumping backward after staging)
+- **Cover edge cases** (empty repo, single file, all files staged, etc.)
 
 ## Contributing
 
