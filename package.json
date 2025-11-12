@@ -1,0 +1,72 @@
+{
+  "name": "vscode-change-iterator",
+  "displayName": "Change Iterator",
+  "description": "Navigate through changed files and changes within files using keyboard shortcuts",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "changeIterator.nextChange",
+        "title": "Go to Next Change"
+      },
+      {
+        "command": "changeIterator.previousChange",
+        "title": "Go to Previous Change"
+      },
+      {
+        "command": "changeIterator.nextFile",
+        "title": "Go to Next Changed File"
+      },
+      {
+        "command": "changeIterator.previousFile",
+        "title": "Go to Previous Changed File"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "changeIterator.nextChange",
+        "key": "ctrl+alt+down",
+        "mac": "cmd+alt+down"
+      },
+      {
+        "command": "changeIterator.previousChange",
+        "key": "ctrl+alt+up",
+        "mac": "cmd+alt+up"
+      },
+      {
+        "command": "changeIterator.nextFile",
+        "key": "ctrl+alt+right",
+        "mac": "cmd+alt+right"
+      },
+      {
+        "command": "changeIterator.previousFile",
+        "key": "ctrl+alt+left",
+        "mac": "cmd+alt+left"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^18.x",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}
