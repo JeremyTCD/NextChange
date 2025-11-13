@@ -69,12 +69,20 @@ export class GitProvider {
 
       for (const change of workingTreeChanges) {
         const status = this.mapStatus(change.status);
-        const relativePath = change.uri.fsPath
-          .replace(repoPath + '/', '')
-          .replace(/\\/g, '/');
+
+        // Get relative path - handle both Unix and Windows path separators
+        let relativePath = change.uri.fsPath;
+        if (relativePath.startsWith(repoPath)) {
+          relativePath = relativePath.substring(repoPath.length);
+        }
+        // Remove leading slash/backslash and convert all backslashes to forward slashes
+        relativePath = relativePath.replace(/^[/\\]/, '').replace(/\\/g, '/');
+
+        console.log('[GitProvider] Processing file:', relativePath);
 
         // Get changes for this file from the unified diff
         const changes = diffsByFile.get(relativePath) || [];
+        console.log('[GitProvider] Found', changes.length, 'hunks for', relativePath);
 
         // Always include ALL files from workingTreeChanges to maintain tree order
         // If we don't have parsed changes, provide a default change at line 1
