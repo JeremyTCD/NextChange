@@ -39,13 +39,17 @@ export class GitProvider {
   async getChangedFiles(): Promise<ChangedFile[]> {
     const repo = this.getRepository();
     if (!repo) {
+      console.log('[GitProvider] No repository found');
       return [];
     }
 
     // ONLY get working tree changes (unstaged) - NOT staged files
     const workingTreeChanges = repo.state.workingTreeChanges;
 
+    console.log('[GitProvider] Working tree changes count:', workingTreeChanges.length);
+
     if (workingTreeChanges.length === 0) {
+      console.log('[GitProvider] No working tree changes');
       return [];
     }
 
@@ -54,9 +58,11 @@ export class GitProvider {
 
       // Get diff for ALL files in ONE git command for maximum performance
       const { stdout } = await exec('git diff', { cwd: repoPath });
+      console.log('[GitProvider] Git diff output length:', stdout.length);
 
       // Parse the unified diff to extract changes per file
       const diffsByFile = this.parseUnifiedDiff(stdout);
+      console.log('[GitProvider] Parsed diffs for', diffsByFile.size, 'files');
 
       // Build changed files list
       const changedFiles: ChangedFile[] = [];
@@ -84,9 +90,10 @@ export class GitProvider {
 
       // Sort files to match Source Control panel's tree view order
       // Tree view uses depth-first traversal with alphabetical sorting at each level
+      console.log('[GitProvider] Returning', changedFiles.length, 'changed files');
       return this.sortFilesTreeViewOrder(changedFiles);
     } catch (error) {
-      console.error('Failed to get changed files:', error);
+      console.error('[GitProvider] Failed to get changed files:', error);
       return [];
     }
   }
@@ -128,6 +135,7 @@ export class GitProvider {
     const result = new Map<string, Change[]>();
 
     if (!diffOutput || diffOutput.trim() === '') {
+      console.log('[parseUnifiedDiff] Empty diff output');
       return result;
     }
 
@@ -136,10 +144,13 @@ export class GitProvider {
     let currentChanges: Change[] = [];
     let inHunk = false;
     let hunkStartLine = 0;
+    let fileCount = 0;
+    let hunkCount = 0;
 
     for (const line of lines) {
       // Check for file header: diff --git a/path b/path
-      const fileMatch = line.match(/^diff --git a\/(.*) b\//);
+      // Use non-greedy match to correctly capture the path
+      const fileMatch = line.match(/^diff --git a\/(.+?) b\//);
       if (fileMatch) {
         // Save previous file's changes
         if (currentFile && currentChanges.length > 0) {
@@ -150,6 +161,8 @@ export class GitProvider {
         currentFile = fileMatch[1];
         currentChanges = [];
         inHunk = false;
+        fileCount++;
+        console.log('[parseUnifiedDiff] Found file:', currentFile);
         continue;
       }
 
@@ -158,6 +171,7 @@ export class GitProvider {
       if (hunkMatch) {
         hunkStartLine = parseInt(hunkMatch[1], 10);
         inHunk = true;
+        hunkCount++;
 
         // Create a single Change object for this entire hunk
         // Use Modification as a general type since hunks can contain additions, deletions, or both
@@ -165,6 +179,7 @@ export class GitProvider {
           lineNumber: hunkStartLine,
           changeType: ChangeType.Modification
         });
+        console.log('[parseUnifiedDiff] Found hunk at line', hunkStartLine, 'in', currentFile);
         continue;
       }
 
@@ -179,6 +194,7 @@ export class GitProvider {
       result.set(currentFile, currentChanges);
     }
 
+    console.log('[parseUnifiedDiff] Parsed', fileCount, 'files with', hunkCount, 'total hunks');
     return result;
   }
 
