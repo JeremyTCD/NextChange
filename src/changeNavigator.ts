@@ -130,13 +130,19 @@ export class ChangeNavigator {
     const activeUri = activeEditor.document.uri.toString();
     const activeLine = activeEditor.selection.active.line + 1; // Convert to 1-based
 
+    // Only update position if the active file is DIFFERENT from current position
+    // This prevents resetting position to the file we just navigated to
+    if (activeUri === this.state.currentFileUri) {
+      return; // Same file, not a manual selection
+    }
+
     // Check if the active file is in our changed files list
     const fileInList = this.state.changedFiles.find(
       f => f.uri.toString() === activeUri
     );
 
     if (fileInList) {
-      // User has manually selected a changed file, update position
+      // User has manually selected a different changed file, update position
       this.state.currentFileUri = activeUri;
       this.state.currentLine = activeLine;
     }

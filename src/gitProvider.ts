@@ -95,6 +95,16 @@ export class GitProvider {
   }
 
   /**
+   * Parse single-file diff output (for testing/backwards compatibility)
+   */
+  parseDiff(diffOutput: string): Change[] {
+    // For single-file diffs, parse as unified and extract first (only) file
+    const map = this.parseUnifiedDiff(diffOutput);
+    const entries = Array.from(map.values());
+    return entries.length > 0 ? entries[0] : [];
+  }
+
+  /**
    * Parse unified diff output into a map of file paths to changes
    */
   private parseUnifiedDiff(diffOutput: string): Map<string, Change[]> {
