@@ -211,7 +211,9 @@ export class GitProvider {
 
   /**
    * Sort files to match VSCode's Source Control tree view order
-   * Tree view uses depth-first traversal with alphabetical sorting at each level
+   * Tree view uses depth-first traversal where:
+   * - At each directory level, subdirectories come BEFORE files
+   * - Both subdirectories and files are sorted alphabetically within their group
    */
   private sortFilesTreeViewOrder(files: ChangedFile[]): ChangedFile[] {
     return files.sort((a, b) => {
@@ -226,7 +228,18 @@ export class GitProvider {
       const minLength = Math.min(segmentsA.length, segmentsB.length);
 
       for (let i = 0; i < minLength; i++) {
-        // Alphabetically compare segments at the same level
+        // Determine if each segment represents a file or directory
+        // Last segment = file, any other segment = directory
+        const aIsFile = (i === segmentsA.length - 1);
+        const bIsFile = (i === segmentsB.length - 1);
+
+        // If one is a directory and one is a file at this level
+        if (aIsFile !== bIsFile) {
+          // Directories come BEFORE files in tree view
+          return aIsFile ? 1 : -1;
+        }
+
+        // Both are files or both are directories - compare alphabetically
         const comparison = segmentsA[i].localeCompare(segmentsB[i], undefined, {
           numeric: true,
           sensitivity: 'base'
@@ -238,7 +251,7 @@ export class GitProvider {
       }
 
       // If all common segments are equal, shorter path comes first
-      // (file comes before its subdirectory)
+      // This shouldn't happen in practice since we handled directory vs file above
       return segmentsA.length - segmentsB.length;
     });
   }

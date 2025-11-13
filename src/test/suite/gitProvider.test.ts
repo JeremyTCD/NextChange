@@ -172,20 +172,20 @@ index 123..456 100644
 
       const sorted = gitProvider.sortFilesTreeViewOrder(files);
 
-      // Expected tree view order (depth-first, alphabetically sorted at each level):
-      // README.md (root level)
-      // src/App.tsx
-      // src/components/Button.tsx
-      // src/utils/deep/file.ts
-      // src/utils/helpers.ts
-      // test/App.test.tsx
+      // Expected tree view order (depth-first, directories before files at each level):
+      // src/components/Button.tsx (src/components/ directory first)
+      // src/utils/deep/file.ts (src/utils/deep/ directory)
+      // src/utils/helpers.ts (src/utils/ files after subdirs)
+      // src/App.tsx (src/ files after subdirs)
+      // test/App.test.tsx (test/ directory)
+      // README.md (root files last)
 
-      assert.ok(sorted[0].uri.fsPath.includes('README.md'));
-      assert.ok(sorted[1].uri.fsPath.includes('src/App.tsx'));
-      assert.ok(sorted[2].uri.fsPath.includes('src/components/Button.tsx'));
-      assert.ok(sorted[3].uri.fsPath.includes('src/utils/deep/file.ts'));
-      assert.ok(sorted[4].uri.fsPath.includes('src/utils/helpers.ts'));
-      assert.ok(sorted[5].uri.fsPath.includes('test/App.test.tsx'));
+      assert.ok(sorted[0].uri.fsPath.includes('src/components/Button.tsx'));
+      assert.ok(sorted[1].uri.fsPath.includes('src/utils/deep/file.ts'));
+      assert.ok(sorted[2].uri.fsPath.includes('src/utils/helpers.ts'));
+      assert.ok(sorted[3].uri.fsPath.includes('src/App.tsx'));
+      assert.ok(sorted[4].uri.fsPath.includes('test/App.test.tsx'));
+      assert.ok(sorted[5].uri.fsPath.includes('README.md'));
     });
 
     test('Should sort files alphabetically within same directory', () => {
@@ -221,19 +221,57 @@ index 123..456 100644
       assert.ok(sorted[2].uri.fsPath.includes('file10.ts'));
     });
 
-    test('Should place files before subdirectories with same prefix', () => {
+    test('Should place subdirectories before files with same prefix', () => {
       const gitProvider = new GitProvider() as any;
 
       const files = [
-        { uri: { fsPath: '/repo/test/utils/helper.ts' } },
-        { uri: { fsPath: '/repo/test.ts' } }
+        { uri: { fsPath: '/repo/test.ts' } },
+        { uri: { fsPath: '/repo/test/utils/helper.ts' } }
       ];
 
       const sorted = gitProvider.sortFilesTreeViewOrder(files);
 
-      // test.ts should come before test/ directory
-      assert.ok(sorted[0].uri.fsPath.includes('test.ts'));
-      assert.ok(sorted[1].uri.fsPath.includes('test/utils/helper.ts'));
+      // test/ directory should come before test.ts file
+      assert.ok(sorted[0].uri.fsPath.includes('test/utils/helper.ts'));
+      assert.ok(sorted[1].uri.fsPath.includes('test.ts'));
+    });
+
+    test('Should handle complex nested structure (user reported case)', () => {
+      const gitProvider = new GitProvider() as any;
+
+      // User's actual structure:
+      // scripts/index/index.ts
+      // scripts/index/main.ts
+      // scripts/rendering/renderables/shapRenderables/SquareRenderable.ts
+      // scripts/rendering/renderables/shapRenderables/CircleRenderable.ts
+      // scripts/rendering/renderables/Renderable.ts
+      // scripts/rendering/Buffers.ts
+
+      const files = [
+        { uri: { fsPath: '/repo/scripts/rendering/Buffers.ts' } },
+        { uri: { fsPath: '/repo/scripts/index/index.ts' } },
+        { uri: { fsPath: '/repo/scripts/rendering/renderables/Renderable.ts' } },
+        { uri: { fsPath: '/repo/scripts/index/main.ts' } },
+        { uri: { fsPath: '/repo/scripts/rendering/renderables/shapRenderables/SquareRenderable.ts' } },
+        { uri: { fsPath: '/repo/scripts/rendering/renderables/shapRenderables/CircleRenderable.ts' } }
+      ];
+
+      const sorted = gitProvider.sortFilesTreeViewOrder(files);
+
+      // Expected order: directories before files at each level
+      // 1. scripts/index/index.ts (index/ comes before rendering/ alphabetically)
+      // 2. scripts/index/main.ts
+      // 3. scripts/rendering/renderables/shapRenderables/CircleRenderable.ts (deepest dir first)
+      // 4. scripts/rendering/renderables/shapRenderables/SquareRenderable.ts
+      // 5. scripts/rendering/renderables/Renderable.ts (files after subdirs)
+      // 6. scripts/rendering/Buffers.ts (files after subdirs)
+
+      assert.ok(sorted[0].uri.fsPath.includes('scripts/index/index.ts'));
+      assert.ok(sorted[1].uri.fsPath.includes('scripts/index/main.ts'));
+      assert.ok(sorted[2].uri.fsPath.includes('shapRenderables/CircleRenderable.ts'));
+      assert.ok(sorted[3].uri.fsPath.includes('shapRenderables/SquareRenderable.ts'));
+      assert.ok(sorted[4].uri.fsPath.includes('renderables/Renderable.ts'));
+      assert.ok(sorted[5].uri.fsPath.includes('rendering/Buffers.ts'));
     });
   });
 
