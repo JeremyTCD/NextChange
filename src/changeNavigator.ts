@@ -25,10 +25,11 @@ export class ChangeNavigator {
    * Navigate to the next change
    */
   async nextChange(): Promise<void> {
-    // Detect if user manually selected a file
-    this.detectManualSelection();
-
+    // Refresh cache first to get latest changes
     await this.refreshCacheIfNeeded();
+
+    // Then detect manual selection with fresh data
+    this.detectManualSelection();
 
     if (this.state.changedFiles.length === 0) {
       vscode.window.showInformationMessage('No changes found');
@@ -48,8 +49,8 @@ export class ChangeNavigator {
    * Navigate to the previous change
    */
   async previousChange(): Promise<void> {
-    this.detectManualSelection();
     await this.refreshCacheIfNeeded();
+    this.detectManualSelection();
 
     if (this.state.changedFiles.length === 0) {
       vscode.window.showInformationMessage('No changes found');
@@ -69,8 +70,8 @@ export class ChangeNavigator {
    * Navigate to the next changed file
    */
   async nextFile(): Promise<void> {
-    this.detectManualSelection();
     await this.refreshCacheIfNeeded();
+    this.detectManualSelection();
 
     if (this.state.changedFiles.length === 0) {
       vscode.window.showInformationMessage('No changed files found');
@@ -96,8 +97,8 @@ export class ChangeNavigator {
    * Navigate to the previous changed file
    */
   async previousFile(): Promise<void> {
-    this.detectManualSelection();
     await this.refreshCacheIfNeeded();
+    this.detectManualSelection();
 
     if (this.state.changedFiles.length === 0) {
       vscode.window.showInformationMessage('No changed files found');
@@ -121,6 +122,7 @@ export class ChangeNavigator {
 
   /**
    * Detect if user manually selected a file in the editor
+   * MUST be called AFTER cache refresh to ensure accurate file list
    */
   private detectManualSelection(): void {
     const activeEditor = vscode.window.activeTextEditor;
@@ -131,14 +133,17 @@ export class ChangeNavigator {
     const activeUri = activeEditor.document.uri.toString();
     const activeLine = activeEditor.selection.active.line + 1; // Convert to 1-based
 
-    // If this is the file we just navigated to programmatically, ignore it
-    if (activeUri === this.lastNavigatedUri) {
-      return;
-    }
-
-    // If the active file is different from our current position, it's a manual selection
+    // If the active file is different from our current position
     if (activeUri !== this.state.currentFileUri) {
-      // Check if the active file is in our changed files list
+      // Check if this is the file we just navigated to (still loading)
+      if (activeUri === this.lastNavigatedUri) {
+        // This is our own navigation completing, not a manual selection
+        this.state.currentFileUri = activeUri;
+        this.state.currentLine = activeLine;
+        return;
+      }
+
+      // Check if the active file is in our changed files list (fresh list)
       const fileInList = this.state.changedFiles.find(
         f => f.uri.toString() === activeUri
       );
@@ -147,6 +152,7 @@ export class ChangeNavigator {
         // User manually selected a different changed file, update position
         this.state.currentFileUri = activeUri;
         this.state.currentLine = activeLine;
+        this.lastNavigatedUri = null;
       }
     }
   }
@@ -168,6 +174,11 @@ export class ChangeNavigator {
     const oldFileUri = this.state.currentFileUri;
     const oldLine = this.state.currentLine;
 
+    // Remember the old file's position (index) in the list
+    const oldFileIndex = oldFileUri
+      ? this.state.changedFiles.findIndex(f => f.uri.toString() === oldFileUri)
+      : -1;
+
     // Get fresh data from Git
     this.state.changedFiles = await this.gitProvider.getChangedFiles();
     this.state.lastCacheUpdate = Date.now();
@@ -179,8 +190,8 @@ export class ChangeNavigator {
       );
 
       if (!oldFileStillExists) {
-        // File was staged/reverted, find next file after this position
-        this.adjustPositionAfterFileRemoved(oldFileUri);
+        // File was staged/reverted, continue from the same position (index)
+        this.adjustPositionAfterFileRemoved(oldFileIndex);
       } else if (oldLine !== null) {
         // File still exists, check if the specific line/change still exists
         const changeStillExists = oldFileStillExists.changes.some(
@@ -204,26 +215,31 @@ export class ChangeNavigator {
 
   /**
    * Adjust position when current file is removed from changes
+   * Uses the old file's index position to continue from the same spot
    */
-  private adjustPositionAfterFileRemoved(oldUri: string): void {
-    // Find where the old file would have been in the sorted list
-    const insertionPoint = this.state.changedFiles.findIndex(
-      f => f.uri.toString() > oldUri
-    );
+  private adjustPositionAfterFileRemoved(oldFileIndex: number): void {
+    if (this.state.changedFiles.length === 0) {
+      // No files left
+      this.state.currentFileUri = null;
+      this.state.currentLine = null;
+      return;
+    }
 
-    if (insertionPoint !== -1 && insertionPoint < this.state.changedFiles.length) {
-      // Set position to the file that comes after
-      this.state.currentFileUri = this.state.changedFiles[insertionPoint].uri.toString();
-      this.state.currentLine = null; // Will start from first change in new file
+    // Continue from the same index position (or closest available file)
+    // If oldFileIndex was 2 and file at index 2 was removed,
+    // we want to go to the NEW file at index 2 (which was previously at index 3)
+    if (oldFileIndex >= 0 && oldFileIndex < this.state.changedFiles.length) {
+      // There's a file at the same index position, use it
+      this.state.currentFileUri = this.state.changedFiles[oldFileIndex].uri.toString();
+      this.state.currentLine = null;
+    } else if (oldFileIndex >= this.state.changedFiles.length) {
+      // Old file was at the end, wrap to beginning
+      this.state.currentFileUri = this.state.changedFiles[0].uri.toString();
+      this.state.currentLine = null;
     } else {
-      // Was the last file, wrap to beginning or clear
-      if (this.state.changedFiles.length > 0) {
-        this.state.currentFileUri = this.state.changedFiles[0].uri.toString();
-        this.state.currentLine = null;
-      } else {
-        this.state.currentFileUri = null;
-        this.state.currentLine = null;
-      }
+      // Shouldn't happen, but default to first file
+      this.state.currentFileUri = this.state.changedFiles[0].uri.toString();
+      this.state.currentLine = null;
     }
   }
 

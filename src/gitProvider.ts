@@ -70,18 +70,16 @@ export class GitProvider {
         // Get changes for this file from the unified diff
         const changes = diffsByFile.get(relativePath) || [];
 
-        // Include files even if they have no parsed line changes
-        // (new files, deleted files, binary files, etc.)
-        if (changes.length > 0 || status === FileStatus.Added || status === FileStatus.Deleted) {
-          changedFiles.push({
-            uri: change.uri,
-            status,
-            changes: changes.length > 0 ? changes : [{
-              lineNumber: 1,
-              changeType: ChangeType.Modification
-            }]
-          });
-        }
+        // Always include ALL files from workingTreeChanges to maintain tree order
+        // If we don't have parsed changes, provide a default change at line 1
+        changedFiles.push({
+          uri: change.uri,
+          status,
+          changes: changes.length > 0 ? changes : [{
+            lineNumber: 1,
+            changeType: ChangeType.Modification
+          }]
+        });
       }
 
       // Keep files in Source Control panel order (don't sort alphabetically!)
