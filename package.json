@@ -3,6 +3,20 @@
   "displayName": "Change Iterator",
   "description": "Navigate through changed files and changes within files using keyboard shortcuts",
   "version": "1.0.0",
+  "publisher": "JeremyTCD",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JeremyTCD/NextChange"
+  },
+  "keywords": [
+    "git",
+    "changes",
+    "navigation",
+    "diff",
+    "source control",
+    "keyboard shortcuts"
+  ],
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -35,23 +49,23 @@
     "keybindings": [
       {
         "command": "changeIterator.nextChange",
-        "key": "ctrl+alt+down",
-        "mac": "cmd+alt+down"
+        "key": "alt+z",
+        "mac": "alt+z"
       },
       {
         "command": "changeIterator.previousChange",
-        "key": "ctrl+alt+up",
-        "mac": "cmd+alt+up"
+        "key": "alt+a",
+        "mac": "alt+a"
       },
       {
         "command": "changeIterator.nextFile",
-        "key": "ctrl+alt+right",
-        "mac": "cmd+alt+right"
+        "key": "ctrl+alt+z",
+        "mac": "ctrl+alt+z"
       },
       {
         "command": "changeIterator.previousFile",
-        "key": "ctrl+alt+left",
-        "mac": "cmd+alt+left"
+        "key": "ctrl+alt+a",
+        "mac": "ctrl+alt+a"
       }
     ]
   },
