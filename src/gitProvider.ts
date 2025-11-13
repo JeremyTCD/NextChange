@@ -82,9 +82,9 @@ export class GitProvider {
         });
       }
 
-      // Keep files in Source Control panel order (don't sort alphabetically!)
-      // The order from workingTreeChanges matches the Source Control tree view
-      return changedFiles;
+      // Sort files to match Source Control panel's tree view order
+      // Tree view uses depth-first traversal with alphabetical sorting at each level
+      return this.sortFilesTreeViewOrder(changedFiles);
     } catch (error) {
       console.error('Failed to get changed files:', error);
       return [];
@@ -207,6 +207,40 @@ export class GitProvider {
     }
 
     return result;
+  }
+
+  /**
+   * Sort files to match VSCode's Source Control tree view order
+   * Tree view uses depth-first traversal with alphabetical sorting at each level
+   */
+  private sortFilesTreeViewOrder(files: ChangedFile[]): ChangedFile[] {
+    return files.sort((a, b) => {
+      const pathA = a.uri.fsPath;
+      const pathB = b.uri.fsPath;
+
+      // Split paths into segments for comparison
+      const segmentsA = pathA.split(/[/\\]/).filter(s => s.length > 0);
+      const segmentsB = pathB.split(/[/\\]/).filter(s => s.length > 0);
+
+      // Compare segment by segment (depth-first tree order)
+      const minLength = Math.min(segmentsA.length, segmentsB.length);
+
+      for (let i = 0; i < minLength; i++) {
+        // Alphabetically compare segments at the same level
+        const comparison = segmentsA[i].localeCompare(segmentsB[i], undefined, {
+          numeric: true,
+          sensitivity: 'base'
+        });
+
+        if (comparison !== 0) {
+          return comparison;
+        }
+      }
+
+      // If all common segments are equal, shorter path comes first
+      // (file comes before its subdirectory)
+      return segmentsA.length - segmentsB.length;
+    });
   }
 
   /**

@@ -156,6 +156,87 @@ index 123..456 100644
     });
   });
 
+  suite('Tree View Sorting', () => {
+    test('Should sort files in depth-first tree order', () => {
+      const gitProvider = new GitProvider() as any;
+
+      // Create mock ChangedFile objects with different path depths
+      const files = [
+        { uri: { fsPath: '/repo/src/utils/deep/file.ts' } },
+        { uri: { fsPath: '/repo/README.md' } },
+        { uri: { fsPath: '/repo/src/App.tsx' } },
+        { uri: { fsPath: '/repo/src/components/Button.tsx' } },
+        { uri: { fsPath: '/repo/test/App.test.tsx' } },
+        { uri: { fsPath: '/repo/src/utils/helpers.ts' } }
+      ];
+
+      const sorted = gitProvider.sortFilesTreeViewOrder(files);
+
+      // Expected tree view order (depth-first, alphabetically sorted at each level):
+      // README.md (root level)
+      // src/App.tsx
+      // src/components/Button.tsx
+      // src/utils/deep/file.ts
+      // src/utils/helpers.ts
+      // test/App.test.tsx
+
+      assert.ok(sorted[0].uri.fsPath.includes('README.md'));
+      assert.ok(sorted[1].uri.fsPath.includes('src/App.tsx'));
+      assert.ok(sorted[2].uri.fsPath.includes('src/components/Button.tsx'));
+      assert.ok(sorted[3].uri.fsPath.includes('src/utils/deep/file.ts'));
+      assert.ok(sorted[4].uri.fsPath.includes('src/utils/helpers.ts'));
+      assert.ok(sorted[5].uri.fsPath.includes('test/App.test.tsx'));
+    });
+
+    test('Should sort files alphabetically within same directory', () => {
+      const gitProvider = new GitProvider() as any;
+
+      const files = [
+        { uri: { fsPath: '/repo/zebra.ts' } },
+        { uri: { fsPath: '/repo/apple.ts' } },
+        { uri: { fsPath: '/repo/middle.ts' } }
+      ];
+
+      const sorted = gitProvider.sortFilesTreeViewOrder(files);
+
+      assert.ok(sorted[0].uri.fsPath.includes('apple.ts'));
+      assert.ok(sorted[1].uri.fsPath.includes('middle.ts'));
+      assert.ok(sorted[2].uri.fsPath.includes('zebra.ts'));
+    });
+
+    test('Should handle numeric sorting correctly', () => {
+      const gitProvider = new GitProvider() as any;
+
+      const files = [
+        { uri: { fsPath: '/repo/file10.ts' } },
+        { uri: { fsPath: '/repo/file2.ts' } },
+        { uri: { fsPath: '/repo/file1.ts' } }
+      ];
+
+      const sorted = gitProvider.sortFilesTreeViewOrder(files);
+
+      // Numeric sorting: file1 < file2 < file10 (not file1 < file10 < file2)
+      assert.ok(sorted[0].uri.fsPath.includes('file1.ts'));
+      assert.ok(sorted[1].uri.fsPath.includes('file2.ts'));
+      assert.ok(sorted[2].uri.fsPath.includes('file10.ts'));
+    });
+
+    test('Should place files before subdirectories with same prefix', () => {
+      const gitProvider = new GitProvider() as any;
+
+      const files = [
+        { uri: { fsPath: '/repo/test/utils/helper.ts' } },
+        { uri: { fsPath: '/repo/test.ts' } }
+      ];
+
+      const sorted = gitProvider.sortFilesTreeViewOrder(files);
+
+      // test.ts should come before test/ directory
+      assert.ok(sorted[0].uri.fsPath.includes('test.ts'));
+      assert.ok(sorted[1].uri.fsPath.includes('test/utils/helper.ts'));
+    });
+  });
+
   suite('Status Mapping', () => {
     test('Should map INDEX_ADDED to Added', () => {
       const gitProvider = new GitProvider();
