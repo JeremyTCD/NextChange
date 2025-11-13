@@ -45,63 +45,86 @@ export class GitProvider {
     // ONLY get working tree changes (unstaged) - NOT staged files
     const workingTreeChanges = repo.state.workingTreeChanges;
 
-    // Fetch all file changes in parallel for better performance
-    const changedFilesPromises = workingTreeChanges.map(async (change: any) => {
-      const status = this.mapStatus(change.status);
-      const changes = await this.getFileChanges(change.uri, repo);
+    if (workingTreeChanges.length === 0) {
+      return [];
+    }
 
-      if (changes.length > 0) {
-        return {
-          uri: change.uri,
-          status,
-          changes
-        };
-      }
-      return null;
-    });
-
-    const results = await Promise.all(changedFilesPromises);
-    const changedFiles = results.filter((file): file is ChangedFile => file !== null);
-
-    // Sort files by URI for consistent ordering
-    changedFiles.sort((a, b) => a.uri.fsPath.localeCompare(b.uri.fsPath));
-
-    return changedFiles;
-  }
-
-  /**
-   * Get changes (line numbers) for a specific file
-   */
-  private async getFileChanges(uri: vscode.Uri, repo: any): Promise<Change[]> {
     try {
       const repoPath = repo.rootUri.fsPath;
-      const filePath = uri.fsPath;
-      const relativePath = filePath.replace(repoPath + '/', '').replace(/\\/g, '/');
 
-      // Use 'git diff' (NOT 'git diff HEAD') to get ONLY unstaged changes
-      // git diff = unstaged only, git diff HEAD = staged + unstaged
-      const { stdout } = await exec(
-        `git diff "${relativePath}"`,
-        { cwd: repoPath }
-      );
+      // Get diff for ALL files in ONE git command for maximum performance
+      const { stdout } = await exec('git diff', { cwd: repoPath });
 
-      return this.parseDiff(stdout);
+      // Parse the unified diff to extract changes per file
+      const diffsByFile = this.parseUnifiedDiff(stdout);
+
+      // Build changed files list
+      const changedFiles: ChangedFile[] = [];
+
+      for (const change of workingTreeChanges) {
+        const status = this.mapStatus(change.status);
+        const relativePath = change.uri.fsPath
+          .replace(repoPath + '/', '')
+          .replace(/\\/g, '/');
+
+        // Get changes for this file from the unified diff
+        const changes = diffsByFile.get(relativePath) || [];
+
+        // Include files even if they have no parsed line changes
+        // (new files, deleted files, binary files, etc.)
+        if (changes.length > 0 || status === FileStatus.Added || status === FileStatus.Deleted) {
+          changedFiles.push({
+            uri: change.uri,
+            status,
+            changes: changes.length > 0 ? changes : [{
+              lineNumber: 1,
+              changeType: ChangeType.Modification
+            }]
+          });
+        }
+      }
+
+      // Sort files by URI for consistent ordering
+      changedFiles.sort((a, b) => a.uri.fsPath.localeCompare(b.uri.fsPath));
+
+      return changedFiles;
     } catch (error) {
-      // File might be new or deleted
-      return this.handleSpecialCases(uri);
+      console.error('Failed to get changed files:', error);
+      return [];
     }
   }
 
   /**
-   * Parse git diff output to extract changed line numbers
+   * Parse unified diff output into a map of file paths to changes
    */
-  private parseDiff(diffOutput: string): Change[] {
-    const changes: Change[] = [];
-    const lines = diffOutput.split('\n');
+  private parseUnifiedDiff(diffOutput: string): Map<string, Change[]> {
+    const result = new Map<string, Change[]>();
 
+    if (!diffOutput || diffOutput.trim() === '') {
+      return result;
+    }
+
+    const lines = diffOutput.split('\n');
+    let currentFile: string | null = null;
     let currentLineNumber = 0;
+    let currentChanges: Change[] = [];
 
     for (const line of lines) {
+      // Check for file header: diff --git a/path b/path
+      const fileMatch = line.match(/^diff --git a\/(.*) b\//);
+      if (fileMatch) {
+        // Save previous file's changes
+        if (currentFile && currentChanges.length > 0) {
+          result.set(currentFile, currentChanges);
+        }
+
+        // Start new file
+        currentFile = fileMatch[1];
+        currentChanges = [];
+        currentLineNumber = 0;
+        continue;
+      }
+
       // Parse hunk header: @@ -10,5 +10,7 @@
       const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
       if (hunkMatch) {
@@ -114,16 +137,17 @@ export class GitProvider {
         continue;
       }
 
+      // Process changes
       if (line.startsWith('+') && !line.startsWith('+++')) {
         // Addition
-        changes.push({
+        currentChanges.push({
           lineNumber: currentLineNumber,
           changeType: ChangeType.Addition
         });
         currentLineNumber++;
       } else if (line.startsWith('-') && !line.startsWith('---')) {
         // Deletion (don't increment line number)
-        changes.push({
+        currentChanges.push({
           lineNumber: currentLineNumber,
           changeType: ChangeType.Deletion
         });
@@ -133,24 +157,12 @@ export class GitProvider {
       }
     }
 
-    return changes;
-  }
-
-  /**
-   * Handle special cases like new or deleted files
-   */
-  private async handleSpecialCases(uri: vscode.Uri): Promise<Change[]> {
-    try {
-      // For new files, mark line 1 as an addition
-      const document = await vscode.workspace.openTextDocument(uri);
-      return [{
-        lineNumber: 1,
-        changeType: ChangeType.Addition
-      }];
-    } catch {
-      // For deleted files, return empty
-      return [];
+    // Save last file's changes
+    if (currentFile && currentChanges.length > 0) {
+      result.set(currentFile, currentChanges);
     }
+
+    return result;
   }
 
   /**

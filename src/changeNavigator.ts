@@ -24,6 +24,9 @@ export class ChangeNavigator {
    * Navigate to the next change
    */
   async nextChange(): Promise<void> {
+    // Detect if user manually selected a file
+    this.detectManualSelection();
+
     await this.refreshCacheIfNeeded();
 
     if (this.state.changedFiles.length === 0) {
@@ -44,6 +47,7 @@ export class ChangeNavigator {
    * Navigate to the previous change
    */
   async previousChange(): Promise<void> {
+    this.detectManualSelection();
     await this.refreshCacheIfNeeded();
 
     if (this.state.changedFiles.length === 0) {
@@ -64,6 +68,7 @@ export class ChangeNavigator {
    * Navigate to the next changed file
    */
   async nextFile(): Promise<void> {
+    this.detectManualSelection();
     await this.refreshCacheIfNeeded();
 
     if (this.state.changedFiles.length === 0) {
@@ -90,6 +95,7 @@ export class ChangeNavigator {
    * Navigate to the previous changed file
    */
   async previousFile(): Promise<void> {
+    this.detectManualSelection();
     await this.refreshCacheIfNeeded();
 
     if (this.state.changedFiles.length === 0) {
@@ -109,6 +115,30 @@ export class ChangeNavigator {
       this.updatePosition(location);
     } else {
       vscode.window.showInformationMessage('No previous changed files');
+    }
+  }
+
+  /**
+   * Detect if user manually selected a file in the editor
+   */
+  private detectManualSelection(): void {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor) {
+      return;
+    }
+
+    const activeUri = activeEditor.document.uri.toString();
+    const activeLine = activeEditor.selection.active.line + 1; // Convert to 1-based
+
+    // Check if the active file is in our changed files list
+    const fileInList = this.state.changedFiles.find(
+      f => f.uri.toString() === activeUri
+    );
+
+    if (fileInList) {
+      // User has manually selected a changed file, update position
+      this.state.currentFileUri = activeUri;
+      this.state.currentLine = activeLine;
     }
   }
 
@@ -378,14 +408,26 @@ export class ChangeNavigator {
    */
   private async navigateTo(location: ChangeLocation): Promise<void> {
     try {
-      const document = await vscode.workspace.openTextDocument(location.fileUri);
-      const editor = await vscode.window.showTextDocument(document);
+      // Try to open diff view using Git extension command (like clicking in Source Control)
+      try {
+        await vscode.commands.executeCommand('git.openChange', location.fileUri);
+      } catch {
+        // Fallback to regular file open if git.openChange is not available
+        await vscode.commands.executeCommand('vscode.open', location.fileUri);
+      }
 
-      const position = new vscode.Position(location.lineNumber - 1, 0); // Convert to 0-based
-      const range = new vscode.Range(position, position);
+      // Wait a bit for the editor to open
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-      editor.selection = new vscode.Selection(position, position);
-      editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+      // Get the active editor after opening
+      const editor = vscode.window.activeTextEditor;
+      if (editor) {
+        const position = new vscode.Position(location.lineNumber - 1, 0); // Convert to 0-based
+        const range = new vscode.Range(position, position);
+
+        editor.selection = new vscode.Selection(position, position);
+        editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+      }
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to navigate: ${error}`);
     }
