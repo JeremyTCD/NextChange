@@ -25,13 +25,17 @@ export class ChangeNavigator {
    * Navigate to the next change
    */
   async nextChange(): Promise<void> {
+    console.log('[ChangeNavigator] nextChange() called');
+
     // Refresh cache first to get latest changes
     await this.refreshCacheIfNeeded();
+    console.log('[ChangeNavigator] After refresh, changedFiles.length =', this.state.changedFiles.length);
 
     // Then detect manual selection with fresh data
     this.detectManualSelection();
 
     if (this.state.changedFiles.length === 0) {
+      console.log('[ChangeNavigator] No changes found, showing message');
       vscode.window.showInformationMessage('No changes found');
       return;
     }
@@ -70,10 +74,15 @@ export class ChangeNavigator {
    * Navigate to the next changed file
    */
   async nextFile(): Promise<void> {
+    console.log('[ChangeNavigator] nextFile() called');
+
     await this.refreshCacheIfNeeded();
+    console.log('[ChangeNavigator] After refresh, changedFiles.length =', this.state.changedFiles.length);
+
     this.detectManualSelection();
 
     if (this.state.changedFiles.length === 0) {
+      console.log('[ChangeNavigator] No changed files found, showing message');
       vscode.window.showInformationMessage('No changed files found');
       return;
     }
