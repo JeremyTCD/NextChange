@@ -3,8 +3,8 @@ import { GitProvider } from '../../gitProvider';
 import { FileStatus, ChangeType } from '../../types';
 
 suite('GitProvider Test Suite', () => {
-  suite('Diff Parsing', () => {
-    test('Should parse simple addition', () => {
+  suite('Diff Parsing - Hunk Based', () => {
+    test('Should parse single hunk', () => {
       const diffOutput = `
 diff --git a/file.ts b/file.ts
 index 123..456 100644
@@ -21,32 +21,32 @@ index 123..456 100644
       const changes = (gitProvider as any).parseDiff(diffOutput);
 
       assert.strictEqual(changes.length, 1);
-      assert.strictEqual(changes[0].lineNumber, 3);
-      assert.strictEqual(changes[0].changeType, ChangeType.Addition);
+      assert.strictEqual(changes[0].lineNumber, 1);
+      assert.strictEqual(changes[0].changeType, ChangeType.Modification);
     });
 
-    test('Should parse simple deletion', () => {
+    test('Should parse hunk starting at specific line', () => {
       const diffOutput = `
 diff --git a/file.ts b/file.ts
 index 123..456 100644
 --- a/file.ts
 +++ b/file.ts
-@@ -1,4 +1,3 @@
- line 1
- line 2
--deleted line
- line 3
+@@ -10,4 +10,3 @@
+ line 10
+ line 11
+-deleted line 12
+ line 13
 `;
 
       const gitProvider = new GitProvider();
       const changes = (gitProvider as any).parseDiff(diffOutput);
 
       assert.strictEqual(changes.length, 1);
-      assert.strictEqual(changes[0].lineNumber, 3);
-      assert.strictEqual(changes[0].changeType, ChangeType.Deletion);
+      assert.strictEqual(changes[0].lineNumber, 10);
+      assert.strictEqual(changes[0].changeType, ChangeType.Modification);
     });
 
-    test('Should parse multiple changes', () => {
+    test('Should parse single hunk with multiple changes within it', () => {
       const diffOutput = `
 diff --git a/file.ts b/file.ts
 index 123..456 100644
@@ -65,22 +65,13 @@ index 123..456 100644
       const gitProvider = new GitProvider();
       const changes = (gitProvider as any).parseDiff(diffOutput);
 
-      assert.strictEqual(changes.length, 3);
-
-      // First addition at line 2
-      assert.strictEqual(changes[0].lineNumber, 2);
-      assert.strictEqual(changes[0].changeType, ChangeType.Addition);
-
-      // Deletion at line 5 (after the addition)
-      assert.strictEqual(changes[1].lineNumber, 5);
-      assert.strictEqual(changes[1].changeType, ChangeType.Deletion);
-
-      // Second addition
-      assert.strictEqual(changes[2].lineNumber, 5);
-      assert.strictEqual(changes[2].changeType, ChangeType.Addition);
+      // Should return 1 hunk, not individual line changes
+      assert.strictEqual(changes.length, 1);
+      assert.strictEqual(changes[0].lineNumber, 1);
+      assert.strictEqual(changes[0].changeType, ChangeType.Modification);
     });
 
-    test('Should parse multiple hunks', () => {
+    test('Should parse multiple hunks as separate changes', () => {
       const diffOutput = `
 diff --git a/file.ts b/file.ts
 index 123..456 100644
@@ -101,11 +92,11 @@ index 123..456 100644
 
       assert.strictEqual(changes.length, 2);
 
-      assert.strictEqual(changes[0].lineNumber, 7);
-      assert.strictEqual(changes[0].changeType, ChangeType.Addition);
+      assert.strictEqual(changes[0].lineNumber, 5);
+      assert.strictEqual(changes[0].changeType, ChangeType.Modification);
 
-      assert.strictEqual(changes[1].lineNumber, 22);
-      assert.strictEqual(changes[1].changeType, ChangeType.Addition);
+      assert.strictEqual(changes[1].lineNumber, 21);
+      assert.strictEqual(changes[1].changeType, ChangeType.Modification);
     });
 
     test('Should handle empty diff', () => {
@@ -117,7 +108,7 @@ index 123..456 100644
       assert.strictEqual(changes.length, 0);
     });
 
-    test('Should ignore diff header lines', () => {
+    test('Should parse hunk header correctly', () => {
       const diffOutput = `
 diff --git a/file.ts b/file.ts
 index 123..456 100644
@@ -131,12 +122,12 @@ index 123..456 100644
       const gitProvider = new GitProvider();
       const changes = (gitProvider as any).parseDiff(diffOutput);
 
-      // Should only have the actual addition, not the --- or +++ header lines
       assert.strictEqual(changes.length, 1);
-      assert.strictEqual(changes[0].changeType, ChangeType.Addition);
+      assert.strictEqual(changes[0].lineNumber, 1);
+      assert.strictEqual(changes[0].changeType, ChangeType.Modification);
     });
 
-    test('Should correctly track line numbers across context lines', () => {
+    test('Should identify hunk starting line from header', () => {
       const diffOutput = `
 @@ -10,7 +10,8 @@
  line 10
@@ -152,7 +143,8 @@ index 123..456 100644
       const changes = (gitProvider as any).parseDiff(diffOutput);
 
       assert.strictEqual(changes.length, 1);
-      assert.strictEqual(changes[0].lineNumber, 13);
+      assert.strictEqual(changes[0].lineNumber, 10);
+      assert.strictEqual(changes[0].changeType, ChangeType.Modification);
     });
   });
 
@@ -307,8 +299,8 @@ index 123..456 100644
     });
   });
 
-  suite('Line Number Tracking', () => {
-    test('Should correctly increment line numbers for additions', () => {
+  suite('Hunk-Based Navigation', () => {
+    test('Should treat consecutive changes as single hunk', () => {
       const diffOutput = `
 @@ -1,3 +1,5 @@
  line 1
@@ -320,12 +312,13 @@ index 123..456 100644
       const gitProvider = new GitProvider();
       const changes = (gitProvider as any).parseDiff(diffOutput);
 
-      assert.strictEqual(changes.length, 2);
-      assert.strictEqual(changes[0].lineNumber, 2);
-      assert.strictEqual(changes[1].lineNumber, 3);
+      // All changes within one hunk = 1 navigable change
+      assert.strictEqual(changes.length, 1);
+      assert.strictEqual(changes[0].lineNumber, 1);
+      assert.strictEqual(changes[0].changeType, ChangeType.Modification);
     });
 
-    test('Should not increment line numbers for deletions', () => {
+    test('Should create separate changes for separate hunks', () => {
       const diffOutput = `
 @@ -1,5 +1,3 @@
  line 1
@@ -337,41 +330,35 @@ index 123..456 100644
       const gitProvider = new GitProvider();
       const changes = (gitProvider as any).parseDiff(diffOutput);
 
-      assert.strictEqual(changes.length, 2);
-      // Both deletions at the same line number since we don't move forward for deletions
-      assert.strictEqual(changes[0].lineNumber, 2);
-      assert.strictEqual(changes[1].lineNumber, 2);
+      // One hunk = one change
+      assert.strictEqual(changes.length, 1);
+      assert.strictEqual(changes[0].lineNumber, 1);
     });
 
-    test('Should handle mix of additions, deletions, and context', () => {
+    test('Should handle file with multiple distant hunks', () => {
       const diffOutput = `
-@@ -10,6 +10,7 @@
+@@ -10,3 +10,4 @@
  line 10
  line 11
 +added at 12
- line 12
--deleted at 13
- line 13
- line 14
+@@ -50,3 +51,4 @@
+ line 50
+ line 51
++added at 52
 `;
 
       const gitProvider = new GitProvider();
       const changes = (gitProvider as any).parseDiff(diffOutput);
 
+      // Two separate hunks = two changes
       assert.strictEqual(changes.length, 2);
-
-      // Addition at line 12
-      assert.strictEqual(changes[0].lineNumber, 12);
-      assert.strictEqual(changes[0].changeType, ChangeType.Addition);
-
-      // Deletion at line 13 (after addition moved us forward)
-      assert.strictEqual(changes[1].lineNumber, 13);
-      assert.strictEqual(changes[1].changeType, ChangeType.Deletion);
+      assert.strictEqual(changes[0].lineNumber, 10);
+      assert.strictEqual(changes[1].lineNumber, 51);
     });
   });
 
   suite('Hunk Header Parsing', () => {
-    test('Should parse simple hunk header', () => {
+    test('Should extract start line from hunk header', () => {
       const diffOutput = `
 @@ -10,5 +10,7 @@
 +added line
@@ -380,11 +367,11 @@ index 123..456 100644
       const gitProvider = new GitProvider();
       const changes = (gitProvider as any).parseDiff(diffOutput);
 
-      // Should start at line 10
+      assert.strictEqual(changes.length, 1);
       assert.strictEqual(changes[0].lineNumber, 10);
     });
 
-    test('Should parse hunk header without count', () => {
+    test('Should handle hunk header without count', () => {
       const diffOutput = `
 @@ -10 +10,2 @@
 +added line 1
@@ -394,12 +381,12 @@ index 123..456 100644
       const gitProvider = new GitProvider();
       const changes = (gitProvider as any).parseDiff(diffOutput);
 
-      assert.strictEqual(changes.length, 2);
+      // One hunk header = one change
+      assert.strictEqual(changes.length, 1);
       assert.strictEqual(changes[0].lineNumber, 10);
-      assert.strictEqual(changes[1].lineNumber, 11);
     });
 
-    test('Should handle multiple hunk headers correctly', () => {
+    test('Should parse multiple hunk headers correctly', () => {
       const diffOutput = `
 @@ -5,2 +5,3 @@
 +added at 5

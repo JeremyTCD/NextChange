@@ -416,6 +416,17 @@ export class ChangeNavigator {
       return this.state.changedFiles[0];
     }
 
+    // Check if we're positioned at a file but haven't navigated to it yet
+    // This happens after staging - currentLine is set to just before first change
+    const currentFile = this.state.changedFiles[currentIndex];
+    if (currentFile.changes.length > 0 && this.state.currentLine !== null) {
+      const firstChangeInFile = currentFile.changes[0].lineNumber;
+      // If currentLine is before the first change, we haven't navigated to this file yet
+      if (this.state.currentLine < firstChangeInFile) {
+        return currentFile; // Return current file, don't advance
+      }
+    }
+
     const nextIndex = (currentIndex + 1) % this.state.changedFiles.length;
     return this.state.changedFiles[nextIndex];
   }

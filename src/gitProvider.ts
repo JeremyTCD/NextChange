@@ -93,45 +93,27 @@ export class GitProvider {
 
   /**
    * Parse single-file diff output (for testing/backwards compatibility)
+   * Returns one Change object per hunk, not per line
    */
   parseDiff(diffOutput: string): Change[] {
-    // Single-file diffs don't have "diff --git" headers, just hunks
-    // Parse them directly without expecting file headers
     const changes: Change[] = [];
     if (!diffOutput || diffOutput.trim() === '') {
       return changes;
     }
 
     const lines = diffOutput.split('\n');
-    let currentLineNumber = 0;
 
     for (const line of lines) {
       // Parse hunk header: @@ -10,5 +10,7 @@
       const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
       if (hunkMatch) {
-        currentLineNumber = parseInt(hunkMatch[1], 10);
-        continue;
-      }
+        const hunkStartLine = parseInt(hunkMatch[1], 10);
 
-      // Skip non-change lines
-      if (!line.startsWith('+') && !line.startsWith('-') && !line.startsWith(' ')) {
-        continue;
-      }
-
-      // Process changes
-      if (line.startsWith('+') && !line.startsWith('+++')) {
+        // Create a single Change object for this entire hunk
         changes.push({
-          lineNumber: currentLineNumber,
-          changeType: ChangeType.Addition
+          lineNumber: hunkStartLine,
+          changeType: ChangeType.Modification
         });
-        currentLineNumber++;
-      } else if (line.startsWith('-') && !line.startsWith('---')) {
-        changes.push({
-          lineNumber: currentLineNumber,
-          changeType: ChangeType.Deletion
-        });
-      } else if (line.startsWith(' ')) {
-        currentLineNumber++;
       }
     }
 
@@ -139,7 +121,8 @@ export class GitProvider {
   }
 
   /**
-   * Parse unified diff output into a map of file paths to changes
+   * Parse unified diff output into a map of file paths to changes (hunks)
+   * Each "change" represents a hunk (continuous block of changes), not individual lines
    */
   private parseUnifiedDiff(diffOutput: string): Map<string, Change[]> {
     const result = new Map<string, Change[]>();
@@ -150,8 +133,9 @@ export class GitProvider {
 
     const lines = diffOutput.split('\n');
     let currentFile: string | null = null;
-    let currentLineNumber = 0;
     let currentChanges: Change[] = [];
+    let inHunk = false;
+    let hunkStartLine = 0;
 
     for (const line of lines) {
       // Check for file header: diff --git a/path b/path
@@ -165,39 +149,28 @@ export class GitProvider {
         // Start new file
         currentFile = fileMatch[1];
         currentChanges = [];
-        currentLineNumber = 0;
+        inHunk = false;
         continue;
       }
 
       // Parse hunk header: @@ -10,5 +10,7 @@
       const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
       if (hunkMatch) {
-        currentLineNumber = parseInt(hunkMatch[1], 10);
+        hunkStartLine = parseInt(hunkMatch[1], 10);
+        inHunk = true;
+
+        // Create a single Change object for this entire hunk
+        // Use Modification as a general type since hunks can contain additions, deletions, or both
+        currentChanges.push({
+          lineNumber: hunkStartLine,
+          changeType: ChangeType.Modification
+        });
         continue;
       }
 
-      // Skip non-change lines
-      if (!line.startsWith('+') && !line.startsWith('-') && !line.startsWith(' ')) {
-        continue;
-      }
-
-      // Process changes
-      if (line.startsWith('+') && !line.startsWith('+++')) {
-        // Addition
-        currentChanges.push({
-          lineNumber: currentLineNumber,
-          changeType: ChangeType.Addition
-        });
-        currentLineNumber++;
-      } else if (line.startsWith('-') && !line.startsWith('---')) {
-        // Deletion (don't increment line number)
-        currentChanges.push({
-          lineNumber: currentLineNumber,
-          changeType: ChangeType.Deletion
-        });
-      } else if (line.startsWith(' ')) {
-        // Context line (no change)
-        currentLineNumber++;
+      // Track when we exit a hunk (encounter a non-hunk line after being in a hunk)
+      if (inHunk && !line.startsWith('+') && !line.startsWith('-') && !line.startsWith(' ')) {
+        inHunk = false;
       }
     }
 
