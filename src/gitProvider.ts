@@ -84,9 +84,8 @@ export class GitProvider {
         }
       }
 
-      // Sort files by URI for consistent ordering
-      changedFiles.sort((a, b) => a.uri.fsPath.localeCompare(b.uri.fsPath));
-
+      // Keep files in Source Control panel order (don't sort alphabetically!)
+      // The order from workingTreeChanges matches the Source Control tree view
       return changedFiles;
     } catch (error) {
       console.error('Failed to get changed files:', error);
@@ -98,10 +97,47 @@ export class GitProvider {
    * Parse single-file diff output (for testing/backwards compatibility)
    */
   parseDiff(diffOutput: string): Change[] {
-    // For single-file diffs, parse as unified and extract first (only) file
-    const map = this.parseUnifiedDiff(diffOutput);
-    const entries = Array.from(map.values());
-    return entries.length > 0 ? entries[0] : [];
+    // Single-file diffs don't have "diff --git" headers, just hunks
+    // Parse them directly without expecting file headers
+    const changes: Change[] = [];
+    if (!diffOutput || diffOutput.trim() === '') {
+      return changes;
+    }
+
+    const lines = diffOutput.split('\n');
+    let currentLineNumber = 0;
+
+    for (const line of lines) {
+      // Parse hunk header: @@ -10,5 +10,7 @@
+      const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (hunkMatch) {
+        currentLineNumber = parseInt(hunkMatch[1], 10);
+        continue;
+      }
+
+      // Skip non-change lines
+      if (!line.startsWith('+') && !line.startsWith('-') && !line.startsWith(' ')) {
+        continue;
+      }
+
+      // Process changes
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        changes.push({
+          lineNumber: currentLineNumber,
+          changeType: ChangeType.Addition
+        });
+        currentLineNumber++;
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        changes.push({
+          lineNumber: currentLineNumber,
+          changeType: ChangeType.Deletion
+        });
+      } else if (line.startsWith(' ')) {
+        currentLineNumber++;
+      }
+    }
+
+    return changes;
   }
 
   /**

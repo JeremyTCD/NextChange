@@ -9,6 +9,7 @@ export class ChangeNavigator {
   private state: NavigationState;
   private gitProvider: GitProvider;
   private readonly CACHE_TTL = 0; // Always refresh to ensure fresh state
+  private lastNavigatedUri: string | null = null; // Track our last programmatic navigation
 
   constructor(gitProvider: GitProvider) {
     this.gitProvider = gitProvider;
@@ -130,21 +131,23 @@ export class ChangeNavigator {
     const activeUri = activeEditor.document.uri.toString();
     const activeLine = activeEditor.selection.active.line + 1; // Convert to 1-based
 
-    // Only update position if the active file is DIFFERENT from current position
-    // This prevents resetting position to the file we just navigated to
-    if (activeUri === this.state.currentFileUri) {
-      return; // Same file, not a manual selection
+    // If this is the file we just navigated to programmatically, ignore it
+    if (activeUri === this.lastNavigatedUri) {
+      return;
     }
 
-    // Check if the active file is in our changed files list
-    const fileInList = this.state.changedFiles.find(
-      f => f.uri.toString() === activeUri
-    );
+    // If the active file is different from our current position, it's a manual selection
+    if (activeUri !== this.state.currentFileUri) {
+      // Check if the active file is in our changed files list
+      const fileInList = this.state.changedFiles.find(
+        f => f.uri.toString() === activeUri
+      );
 
-    if (fileInList) {
-      // User has manually selected a different changed file, update position
-      this.state.currentFileUri = activeUri;
-      this.state.currentLine = activeLine;
+      if (fileInList) {
+        // User manually selected a different changed file, update position
+        this.state.currentFileUri = activeUri;
+        this.state.currentLine = activeLine;
+      }
     }
   }
 
@@ -414,6 +417,9 @@ export class ChangeNavigator {
    */
   private async navigateTo(location: ChangeLocation): Promise<void> {
     try {
+      // Remember this URI as our programmatic navigation
+      this.lastNavigatedUri = location.fileUri.toString();
+
       // Try to open diff view using Git extension command (like clicking in Source Control)
       try {
         await vscode.commands.executeCommand('git.openChange', location.fileUri);
