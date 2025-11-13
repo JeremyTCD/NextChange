@@ -34,7 +34,7 @@ export class GitProvider {
   }
 
   /**
-   * Get all changed files (working tree + index changes)
+   * Get all changed files (ONLY unstaged/working tree changes)
    */
   async getChangedFiles(): Promise<ChangedFile[]> {
     const repo = this.getRepository();
@@ -42,46 +42,26 @@ export class GitProvider {
       return [];
     }
 
-    const changedFiles: ChangedFile[] = [];
-    const seenUris = new Set<string>();
+    // ONLY get working tree changes (unstaged) - NOT staged files
+    const workingTreeChanges = repo.state.workingTreeChanges;
 
-    // Get working tree changes (unstaged)
-    for (const change of repo.state.workingTreeChanges) {
-      const uriString = change.uri.toString();
-      if (!seenUris.has(uriString)) {
-        seenUris.add(uriString);
+    // Fetch all file changes in parallel for better performance
+    const changedFilesPromises = workingTreeChanges.map(async (change: any) => {
+      const status = this.mapStatus(change.status);
+      const changes = await this.getFileChanges(change.uri, repo);
 
-        const status = this.mapStatus(change.status);
-        const changes = await this.getFileChanges(change.uri, repo);
-
-        if (changes.length > 0) {
-          changedFiles.push({
-            uri: change.uri,
-            status,
-            changes
-          });
-        }
+      if (changes.length > 0) {
+        return {
+          uri: change.uri,
+          status,
+          changes
+        };
       }
-    }
+      return null;
+    });
 
-    // Get index changes (staged) - some users might want to review these too
-    for (const change of repo.state.indexChanges) {
-      const uriString = change.uri.toString();
-      if (!seenUris.has(uriString)) {
-        seenUris.add(uriString);
-
-        const status = this.mapStatus(change.status);
-        const changes = await this.getFileChanges(change.uri, repo);
-
-        if (changes.length > 0) {
-          changedFiles.push({
-            uri: change.uri,
-            status,
-            changes
-          });
-        }
-      }
-    }
+    const results = await Promise.all(changedFilesPromises);
+    const changedFiles = results.filter((file): file is ChangedFile => file !== null);
 
     // Sort files by URI for consistent ordering
     changedFiles.sort((a, b) => a.uri.fsPath.localeCompare(b.uri.fsPath));
@@ -96,11 +76,12 @@ export class GitProvider {
     try {
       const repoPath = repo.rootUri.fsPath;
       const filePath = uri.fsPath;
-      const relativePath = filePath.replace(repoPath + '/', '');
+      const relativePath = filePath.replace(repoPath + '/', '').replace(/\\/g, '/');
 
-      // Get diff for the file
+      // Use 'git diff' (NOT 'git diff HEAD') to get ONLY unstaged changes
+      // git diff = unstaged only, git diff HEAD = staged + unstaged
       const { stdout } = await exec(
-        `git diff HEAD "${relativePath}"`,
+        `git diff "${relativePath}"`,
         { cwd: repoPath }
       );
 

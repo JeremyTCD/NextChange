@@ -8,7 +8,7 @@ import { ChangedFile, NavigationState, ChangeLocation } from './types';
 export class ChangeNavigator {
   private state: NavigationState;
   private gitProvider: GitProvider;
-  private readonly CACHE_TTL = 1000; // 1 second cache TTL
+  private readonly CACHE_TTL = 0; // Always refresh to ensure fresh state
 
   constructor(gitProvider: GitProvider) {
     this.gitProvider = gitProvider;
